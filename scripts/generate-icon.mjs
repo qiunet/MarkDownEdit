@@ -1,12 +1,15 @@
 import sharp from 'sharp'
-import { readFileSync } from 'fs'
+import { readFileSync, mkdirSync } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = join(__dirname, '..')
-const svgPath = join(root, 'build', 'markdown.svg')
-const pngPath = join(root, 'build', 'icon.png')
+const svgPath = join(root, 'resources', 'markdown.svg')
+const buildDir = join(root, 'build')
+const pngPath = join(buildDir, 'icon.png')
+
+mkdirSync(buildDir, { recursive: true })
 
 const svg = readFileSync(svgPath)
 

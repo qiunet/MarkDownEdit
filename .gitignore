@@ -34,7 +34,7 @@ scripts/icon/
 
 # Electron/packager artifacts
 release/
-build/
+build/icon.png
 *.asar
 *.bak
 
