@@ -1,0 +1,45 @@
+# Node dependencies
+node_modules/
+
+# Production build output
+dist/
+out/
+
+# Log files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Vite
+.vite/
+
+# Editor config
+.vscode/
+.idea/
+*.swp
+
+# TypeScript
+*.tsbuildinfo
+
+# Build scripts output
+scripts/icon/
+
+# Local env files
+.env
+.env.*
+
+# Electron/packager artifacts
+release/
+build/
+*.asar
+*.bak
+
+# Mac
+*.DS_Store
+
+# Windows
+*.Thumbs.db

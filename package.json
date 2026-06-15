@@ -1,0 +1,36 @@
+{
+  "name": "markdown-edit",
+  "version": "1.0.0",
+  "description": "Markdown editor built with Electron, Vue 3 and TypeScript",
+  "main": "./out/main/index.js",
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/qiunet/MarkDownEdit.git"
+  },
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "npm run build:icon && electron-vite build",
+    "build:icon": "node scripts/generate-icon.mjs",
+    "preview": "electron-vite preview",
+    "build:win": "npm run build && electron-builder --win --config electron-builder.yml",
+    "build:mac": "npm run build && electron-builder --mac --config electron-builder.yml",
+    "release": "npm run build && electron-builder --publish always --config electron-builder.yml"
+  },
+  "dependencies": {
+    "markdown-it": "^14.2.0",
+    "md-editor-v3": "^6.5.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "electron": "^42.3.1",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^5.0.0",
+    "sharp": "^0.33.5",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.0",
+    "vue": "^3.5.13",
+    "vue-tsc": "^2.2.8"
+  }
+}
