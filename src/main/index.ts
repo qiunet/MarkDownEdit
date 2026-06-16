@@ -2,14 +2,25 @@ import { app, shell, BrowserWindow, ipcMain, dialog, Menu, nativeTheme, protocol
 import { join } from 'path'
 import { pathToFileURL } from 'url'
 import { readFile, writeFile } from 'fs/promises'
-import { loadSettings, saveSettings, type ThemeMode } from './settings'
+import { loadSettings, updateSettings, type ThemeMode } from './settings'
 import { saveImages } from './image'
+import { readDirectory, createMarkdownFile } from './notebook'
 
 let mainWindow: BrowserWindow | null = null
 let currentFilePath: string | null = null
 let themeMode: ThemeMode = 'system'
+let notebookRoot: string | null = null
+let sidebarCollapsed = false
 
 const isDev = !app.isPackaged
+
+function getNotebookState() {
+  return { root: notebookRoot, sidebarCollapsed }
+}
+
+function broadcastNotebook(): void {
+  mainWindow?.webContents.send('notebook:changed', getNotebookState())
+}
 
 function getResolvedTheme(): 'light' | 'dark' {
   return nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
@@ -22,9 +33,27 @@ function broadcastTheme(): void {
 async function setThemeMode(mode: ThemeMode): Promise<void> {
   themeMode = mode
   nativeTheme.themeSource = mode
-  await saveSettings({ themeMode: mode })
+  await updateSettings({ themeMode: mode })
   createMenu()
   broadcastTheme()
+}
+
+async function setNotebookRoot(root: string | null): Promise<void> {
+  notebookRoot = root
+  if (root) {
+    sidebarCollapsed = false
+  }
+  await updateSettings({ notebookRoot: root, sidebarCollapsed })
+  createMenu()
+  broadcastNotebook()
+}
+
+async function setSidebarCollapsed(collapsed: boolean): Promise<void> {
+  if (!notebookRoot) return
+  sidebarCollapsed = collapsed
+  await updateSettings({ sidebarCollapsed: collapsed })
+  createMenu()
+  broadcastNotebook()
 }
 
 function createWindow(): void {
@@ -47,6 +76,7 @@ function createWindow(): void {
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
     broadcastTheme()
+    mainWindow?.webContents.send('notebook:changed', getNotebookState())
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -105,6 +135,16 @@ function createMenu(): void {
           click: () => mainWindow?.webContents.send('menu:open')
         },
         {
+          label: '打开文件夹',
+          click: () => void openNotebookFolder()
+        },
+        {
+          label: '关闭文件夹',
+          enabled: !!notebookRoot,
+          click: () => void setNotebookRoot(null)
+        },
+        { type: 'separator' },
+        {
           label: '保存',
           accelerator: 'CmdOrCtrl+S',
           click: () => mainWindow?.webContents.send('menu:save')
@@ -156,6 +196,11 @@ function createMenu(): void {
             }
           ]
         },
+        {
+          label: sidebarCollapsed ? '展开侧边栏' : '收起侧边栏',
+          enabled: !!notebookRoot,
+          click: () => void setSidebarCollapsed(!sidebarCollapsed)
+        },
         { type: 'separator' },
         { role: 'reload', label: '重新加载' },
         { role: 'toggleDevTools', label: '开发者工具' },
@@ -172,6 +217,19 @@ function createMenu(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
+async function openNotebookFolder(): Promise<void> {
+  const result = await dialog.showOpenDialog({
+    title: '打开笔记本文件夹',
+    properties: ['openDirectory']
+  })
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return
+  }
+
+  await setNotebookRoot(result.filePaths[0])
+}
+
 app.whenReady().then(async () => {
   if (process.platform === 'win32') {
     app.setAppUserModelId('com.markdownedit.app')
@@ -179,6 +237,8 @@ app.whenReady().then(async () => {
 
   const settings = await loadSettings()
   themeMode = settings.themeMode
+  notebookRoot = settings.notebookRoot
+  sidebarCollapsed = settings.sidebarCollapsed
   nativeTheme.themeSource = themeMode
 
   protocol.handle('mdimage', async (request) => {
@@ -235,13 +295,13 @@ ipcMain.handle('dialog:openFile', async () => {
   return { filePath, content }
 })
 
-ipcMain.handle('dialog:saveFile', async (_event, content: string, saveAs = false) => {
-  let filePath = currentFilePath
+ipcMain.handle('dialog:saveFile', async (_event, content: string, saveAs = false, filePath?: string | null) => {
+  let targetPath = filePath ?? currentFilePath
 
-  if (!filePath || saveAs) {
+  if (!targetPath || saveAs) {
     const result = await dialog.showSaveDialog({
       title: '保存 Markdown 文件',
-      defaultPath: filePath ?? 'untitled.md',
+      defaultPath: targetPath ?? 'untitled.md',
       filters: [
         { name: 'Markdown', extensions: ['md'] },
         { name: '所有文件', extensions: ['*'] }
@@ -252,16 +312,20 @@ ipcMain.handle('dialog:saveFile', async (_event, content: string, saveAs = false
       return null
     }
 
-    filePath = result.filePath
+    targetPath = result.filePath
   }
 
-  await writeFile(filePath, content, 'utf-8')
-  currentFilePath = filePath
+  await writeFile(targetPath, content, 'utf-8')
+  currentFilePath = targetPath
 
-  return { filePath }
+  return { filePath: targetPath }
 })
 
 ipcMain.handle('file:getCurrentPath', () => currentFilePath)
+
+ipcMain.handle('file:setCurrentPath', (_event, filePath: string | null) => {
+  currentFilePath = filePath
+})
 
 ipcMain.handle('file:new', () => {
   currentFilePath = null
@@ -282,4 +346,34 @@ ipcMain.handle('image:save', async (_event, images: Array<{ name: string; data: 
   }
 
   return saveImages(currentFilePath, images)
+})
+
+ipcMain.handle('notebook:getState', () => getNotebookState())
+
+ipcMain.handle('notebook:readDir', async (_event, dirPath: string) => {
+  return readDirectory(dirPath)
+})
+
+ipcMain.handle('notebook:readFile', async (_event, filePath: string) => {
+  const content = await readFile(filePath, 'utf-8')
+  return { filePath, content }
+})
+
+ipcMain.handle('notebook:openFolder', async () => {
+  await openNotebookFolder()
+  return getNotebookState()
+})
+
+ipcMain.handle('notebook:close', async () => {
+  await setNotebookRoot(null)
+  return getNotebookState()
+})
+
+ipcMain.handle('notebook:setSidebarCollapsed', async (_event, collapsed: boolean) => {
+  await setSidebarCollapsed(collapsed)
+  return getNotebookState()
+})
+
+ipcMain.handle('notebook:createFile', async (_event, dirPath: string, fileName: string) => {
+  return createMarkdownFile(dirPath, fileName)
 })
