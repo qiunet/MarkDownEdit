@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import FileNameDialog from './FileNameDialog.vue'
+import ConfirmDialog from './ConfirmDialog.vue'
 
 export interface TreeEntry {
   name: string
   path: string
   type: 'file' | 'directory'
+  editable?: boolean
 }
 
 const props = defineProps<{
@@ -18,6 +20,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   openFile: [filePath: string]
   fileCreated: [filePath: string, content: string]
+  itemDeleted: [itemPath: string]
 }>()
 
 const expanded = ref(false)
@@ -28,6 +31,8 @@ const menuVisible = ref(false)
 const menuX = ref(0)
 const menuY = ref(0)
 const dialogVisible = ref(false)
+const dialogType = ref<'file' | 'folder'>('file')
+const deleteDialogVisible = ref(false)
 const selected = ref(false)
 
 async function loadChildren(): Promise<void> {
@@ -61,6 +66,7 @@ async function toggleExpand(): Promise<void> {
 
 function handleClick(): void {
   if (props.entry.type === 'file') {
+    if (props.entry.editable === false) return
     emit('openFile', props.entry.path)
     return
   }
@@ -74,39 +80,94 @@ function closeMenu(): void {
 }
 
 function handleContextMenu(event: MouseEvent): void {
-  if (props.entry.type !== 'directory') return
-
   event.preventDefault()
-  selected.value = true
-  void expandFolder()
+  if (props.entry.type === 'directory') {
+    selected.value = true
+    void expandFolder()
+  }
   menuX.value = event.clientX
   menuY.value = event.clientY
   menuVisible.value = true
 }
 
-function openCreateDialog(): void {
+function showInExplorer(): void {
   closeMenu()
+  void window.fileApi.showInExplorer(props.entry.path)
+}
+
+function openCreateFileDialog(): void {
+  closeMenu()
+  dialogType.value = 'file'
   dialogVisible.value = true
+}
+
+function openCreateFolderDialog(): void {
+  closeMenu()
+  dialogType.value = 'folder'
+  dialogVisible.value = true
+}
+
+function openDeleteDialog(): void {
+  closeMenu()
+  deleteDialogVisible.value = true
+}
+
+const deleteConfirmMessage = computed(() => {
+  if (props.entry.type === 'directory') {
+    return `确定删除文件夹「${props.entry.name}」及其全部内容吗？此操作不可恢复。`
+  }
+  return `确定删除文件「${props.entry.name}」吗？此操作不可恢复。`
+})
+
+async function handleDeleteConfirm(): Promise<void> {
+  deleteDialogVisible.value = false
+
+  try {
+    await window.fileApi.deleteNotebookEntry(props.entry.path)
+    emit('itemDeleted', props.entry.path)
+  } catch {
+    alert('删除失败')
+  }
+}
+
+function handleCreateError(error: unknown, type: 'file' | 'folder'): void {
+  const message = error instanceof Error ? error.message : String(error)
+  if (message.includes('ALREADY_EXISTS') || message.includes('FILE_EXISTS')) {
+    alert(type === 'file' ? '文件已存在' : '文件夹已存在')
+    return
+  }
+  alert(type === 'file' ? '创建文件失败' : '创建文件夹失败')
 }
 
 async function handleCreateConfirm(name: string): Promise<void> {
   dialogVisible.value = false
 
   try {
-    const result = await window.fileApi.createNotebookFile(props.entry.path, name)
+    if (dialogType.value === 'file') {
+      const result = await window.fileApi.createNotebookFile(props.entry.path, name)
+      if (!expanded.value) {
+        expanded.value = true
+      }
+      await loadChildren()
+      emit('fileCreated', result.filePath, result.content)
+      return
+    }
+
+    await window.fileApi.createNotebookFolder(props.entry.path, name)
     if (!expanded.value) {
       expanded.value = true
     }
     await loadChildren()
-    emit('fileCreated', result.filePath, result.content)
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    if (message.includes('FILE_EXISTS')) {
-      alert('文件已存在')
-      return
-    }
-    alert('创建文件失败')
+    handleCreateError(error, dialogType.value)
   }
+}
+
+async function handleChildDeleted(itemPath: string): Promise<void> {
+  if (expanded.value) {
+    await loadChildren()
+  }
+  emit('itemDeleted', itemPath)
 }
 
 function handleDocumentClick(): void {
@@ -129,9 +190,10 @@ onUnmounted(() => {
       class="tree-row"
       :data-theme="theme"
       :class="{
-        active: entry.type === 'file' && entry.path === activeFilePath,
+        active: entry.type === 'file' && entry.editable !== false && entry.path === activeFilePath,
         selected: entry.type === 'directory' && selected,
-        directory: entry.type === 'directory'
+        directory: entry.type === 'directory',
+        'non-editable': entry.type === 'file' && entry.editable === false
       }"
       :style="{ paddingLeft: `${depth * 14 + 8}px` }"
       :title="entry.path"
@@ -148,20 +210,41 @@ onUnmounted(() => {
 
     <Teleport to="body">
       <div
-        v-if="menuVisible && entry.type === 'directory'"
+        v-if="menuVisible"
         class="context-menu"
         :data-theme="theme"
         :style="{ left: `${menuX}px`, top: `${menuY}px` }"
         @mousedown.stop
       >
-        <button type="button" @click="openCreateDialog">新建文件</button>
+        <template v-if="entry.type === 'directory'">
+          <button type="button" @click="openCreateFileDialog">新建文件</button>
+          <button type="button" @click="openCreateFolderDialog">新建文件夹</button>
+          <div class="context-menu-divider" />
+        </template>
+        <button type="button" @click="showInExplorer">资源管理器展示</button>
+        <div class="context-menu-divider" />
+        <button type="button" class="menu-danger" @click="openDeleteDialog">删除</button>
       </div>
     </Teleport>
+
+    <ConfirmDialog
+      :visible="deleteDialogVisible"
+      :theme="theme"
+      title="确认删除"
+      :message="deleteConfirmMessage"
+      confirm-text="删除"
+      danger
+      @confirm="handleDeleteConfirm"
+      @cancel="deleteDialogVisible = false"
+    />
 
     <FileNameDialog
       :visible="dialogVisible"
       :theme="theme"
-      default-name="untitled.md"
+      :title="dialogType === 'file' ? '新建文件' : '新建文件夹'"
+      :default-name="dialogType === 'file' ? 'untitled.md' : '新建文件夹'"
+      :placeholder="dialogType === 'file' ? '文件名，如 notes.md' : '文件夹名称'"
+      :name-label="dialogType === 'file' ? '文件名' : '文件夹名'"
       @confirm="handleCreateConfirm"
       @cancel="dialogVisible = false"
     />
@@ -179,6 +262,7 @@ onUnmounted(() => {
         :active-file-path="activeFilePath"
         @open-file="emit('openFile', $event)"
         @file-created="(path, content) => emit('fileCreated', path, content)"
+        @item-deleted="handleChildDeleted"
       />
     </div>
   </div>
@@ -226,6 +310,23 @@ onUnmounted(() => {
 
 .tree-row[data-theme='dark'].selected {
   background: rgba(59, 130, 246, 0.15);
+}
+
+.tree-row.non-editable {
+  color: #9ca3af;
+  cursor: default;
+}
+
+.tree-row.non-editable:hover {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.tree-row[data-theme='dark'].non-editable {
+  color: #6b7280;
+}
+
+.tree-row[data-theme='dark'].non-editable:hover {
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .tree-arrow {
@@ -293,5 +394,27 @@ onUnmounted(() => {
 
 .context-menu[data-theme='dark'] button:hover {
   background: #3c3c3c;
+}
+
+.context-menu-divider {
+  height: 1px;
+  margin: 4px 6px;
+  background: #e5e7eb;
+}
+
+.context-menu[data-theme='dark'] .context-menu-divider {
+  background: #3c3c3c;
+}
+
+.context-menu button.menu-danger {
+  color: #ef4444;
+}
+
+.context-menu button.menu-danger:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.context-menu[data-theme='dark'] button.menu-danger:hover {
+  background: rgba(239, 68, 68, 0.15);
 }
 </style>

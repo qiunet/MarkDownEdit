@@ -1,10 +1,10 @@
 import { app, shell, BrowserWindow, ipcMain, dialog, Menu, nativeTheme, protocol, net } from 'electron'
-import { join } from 'path'
+import { join, resolve, relative } from 'path'
 import { pathToFileURL } from 'url'
-import { readFile, writeFile } from 'fs/promises'
+import { readFile, writeFile, stat } from 'fs/promises'
 import { loadSettings, updateSettings, type ThemeMode } from './settings'
 import { saveImages } from './image'
-import { readDirectory, createMarkdownFile } from './notebook'
+import { readDirectory, createMarkdownFile, createDirectory, deleteEntry } from './notebook'
 
 let mainWindow: BrowserWindow | null = null
 let currentFilePath: string | null = null
@@ -20,6 +20,24 @@ function getNotebookState() {
 
 function broadcastNotebook(): void {
   mainWindow?.webContents.send('notebook:changed', getNotebookState())
+}
+
+function assertWithinNotebook(itemPath: string): void {
+  if (!notebookRoot) {
+    throw new Error('NO_NOTEBOOK')
+  }
+
+  const root = resolve(notebookRoot)
+  const target = resolve(itemPath)
+  const rel = relative(root, target)
+
+  if (!rel || rel.startsWith('..') || rel.includes('..')) {
+    throw new Error('OUT_OF_SCOPE')
+  }
+
+  if (target === root) {
+    throw new Error('CANNOT_DELETE_ROOT')
+  }
 }
 
 function getResolvedTheme(): 'light' | 'dark' {
@@ -376,4 +394,22 @@ ipcMain.handle('notebook:setSidebarCollapsed', async (_event, collapsed: boolean
 
 ipcMain.handle('notebook:createFile', async (_event, dirPath: string, fileName: string) => {
   return createMarkdownFile(dirPath, fileName)
+})
+
+ipcMain.handle('notebook:createFolder', async (_event, parentPath: string, folderName: string) => {
+  return createDirectory(parentPath, folderName)
+})
+
+ipcMain.handle('notebook:showInExplorer', async (_event, itemPath: string) => {
+  const info = await stat(itemPath)
+  if (info.isDirectory()) {
+    await shell.openPath(itemPath)
+  } else {
+    shell.showItemInFolder(itemPath)
+  }
+})
+
+ipcMain.handle('notebook:delete', async (_event, itemPath: string) => {
+  assertWithinNotebook(itemPath)
+  await deleteEntry(itemPath)
 })

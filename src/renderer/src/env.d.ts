@@ -2,6 +2,7 @@ export interface DirEntry {
   name: string
   path: string
   type: 'file' | 'directory'
+  editable?: boolean
 }
 
 export interface NotebookState {
@@ -24,6 +25,9 @@ export interface FileApi {
   readNotebookDir: (dirPath: string) => Promise<DirEntry[]>
   readNotebookFile: (filePath: string) => Promise<{ filePath: string; content: string }>
   createNotebookFile: (dirPath: string, fileName: string) => Promise<{ filePath: string; content: string }>
+  createNotebookFolder: (parentPath: string, folderName: string) => Promise<{ dirPath: string }>
+  showInExplorer: (itemPath: string) => Promise<void>
+  deleteNotebookEntry: (itemPath: string) => Promise<void>
   setSidebarCollapsed: (collapsed: boolean) => Promise<NotebookState>
   onNotebookChange: (callback: (state: NotebookState) => void) => () => void
   onMenuNew: (callback: () => void) => () => void

@@ -12,6 +12,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   openFile: [filePath: string, content: string]
   collapse: []
+  itemDeleted: [itemPath: string]
 }>()
 
 const rootEntries = ref<TreeEntry[]>([])
@@ -20,6 +21,7 @@ const rootMenuVisible = ref(false)
 const rootMenuX = ref(0)
 const rootMenuY = ref(0)
 const rootDialogVisible = ref(false)
+const rootDialogType = ref<'file' | 'folder'>('file')
 
 async function loadRoot(): Promise<void> {
   loading.value = true
@@ -45,26 +47,48 @@ function handleRootContextMenu(event: MouseEvent): void {
   rootMenuVisible.value = true
 }
 
-async function handleCreateFileAtRoot(name: string): Promise<void> {
+function handleCreateError(error: unknown, type: 'file' | 'folder'): void {
+  const message = error instanceof Error ? error.message : String(error)
+  if (message.includes('ALREADY_EXISTS') || message.includes('FILE_EXISTS')) {
+    alert(type === 'file' ? '文件已存在' : '文件夹已存在')
+    return
+  }
+  alert(type === 'file' ? '创建文件失败' : '创建文件夹失败')
+}
+
+async function handleCreateAtRoot(name: string): Promise<void> {
   rootDialogVisible.value = false
 
   try {
-    const result = await window.fileApi.createNotebookFile(props.root, name)
-    refresh()
-    emit('openFile', result.filePath, result.content)
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    if (message.includes('FILE_EXISTS')) {
-      alert('文件已存在')
+    if (rootDialogType.value === 'file') {
+      const result = await window.fileApi.createNotebookFile(props.root, name)
+      refresh()
+      emit('openFile', result.filePath, result.content)
       return
     }
-    alert('创建文件失败')
+
+    await window.fileApi.createNotebookFolder(props.root, name)
+    refresh()
+  } catch (error) {
+    handleCreateError(error, rootDialogType.value)
   }
 }
 
-function openRootCreateDialog(): void {
+function openRootCreateFileDialog(): void {
   closeRootMenu()
+  rootDialogType.value = 'file'
   rootDialogVisible.value = true
+}
+
+function openRootCreateFolderDialog(): void {
+  closeRootMenu()
+  rootDialogType.value = 'folder'
+  rootDialogVisible.value = true
+}
+
+function showRootInExplorer(): void {
+  closeRootMenu()
+  void window.fileApi.showInExplorer(props.root)
 }
 
 async function handleOpenFile(filePath: string): Promise<void> {
@@ -74,6 +98,11 @@ async function handleOpenFile(filePath: string): Promise<void> {
 
 function handleFileCreated(filePath: string, content: string): void {
   emit('openFile', filePath, content)
+}
+
+function handleItemDeleted(itemPath: string): void {
+  refresh()
+  emit('itemDeleted', itemPath)
 }
 
 defineExpose({ refresh })
@@ -118,8 +147,9 @@ onUnmounted(() => {
         :active-file-path="activeFilePath"
         @open-file="handleOpenFile"
         @file-created="handleFileCreated"
+        @item-deleted="handleItemDeleted"
       />
-      <div v-if="!loading && rootEntries.length === 0" class="sidebar-empty-inline">暂无 Markdown 文件</div>
+      <div v-if="!loading && rootEntries.length === 0" class="sidebar-empty-inline">暂无文件</div>
     </div>
 
     <Teleport to="body">
@@ -130,15 +160,21 @@ onUnmounted(() => {
         :style="{ left: `${rootMenuX}px`, top: `${rootMenuY}px` }"
         @mousedown.stop
       >
-        <button type="button" @click="openRootCreateDialog">新建文件</button>
+        <button type="button" @click="openRootCreateFileDialog">新建文件</button>
+        <button type="button" @click="openRootCreateFolderDialog">新建文件夹</button>
+        <div class="context-menu-divider" />
+        <button type="button" @click="showRootInExplorer">资源管理器展示</button>
       </div>
     </Teleport>
 
     <FileNameDialog
       :visible="rootDialogVisible"
       :theme="theme"
-      default-name="untitled.md"
-      @confirm="handleCreateFileAtRoot"
+      :title="rootDialogType === 'file' ? '新建文件' : '新建文件夹'"
+      :default-name="rootDialogType === 'file' ? 'untitled.md' : '新建文件夹'"
+      :placeholder="rootDialogType === 'file' ? '文件名，如 notes.md' : '文件夹名称'"
+      :name-label="rootDialogType === 'file' ? '文件名' : '文件夹名'"
+      @confirm="handleCreateAtRoot"
       @cancel="rootDialogVisible = false"
     />
   </aside>
@@ -295,6 +331,16 @@ onUnmounted(() => {
 }
 
 .context-menu[data-theme='dark'] button:hover {
+  background: #3c3c3c;
+}
+
+.context-menu-divider {
+  height: 1px;
+  margin: 4px 6px;
+  background: #e5e7eb;
+}
+
+.context-menu[data-theme='dark'] .context-menu-divider {
   background: #3c3c3c;
 }
 </style>

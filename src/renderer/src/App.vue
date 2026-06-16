@@ -123,6 +123,38 @@ function switchTab(tabId: string): void {
   activeTabId.value = tabId
 }
 
+function forceCloseTab(tabId: string): void {
+  const index = tabs.value.findIndex((tab) => tab.id === tabId)
+  if (index < 0) return
+
+  tabs.value.splice(index, 1)
+
+  if (tabs.value.length === 0) {
+    const newTab = createTab()
+    tabs.value.push(newTab)
+    activeTabId.value = newTab.id
+    return
+  }
+
+  if (activeTabId.value === tabId) {
+    const nextIndex = index >= tabs.value.length ? tabs.value.length - 1 : index
+    activeTabId.value = tabs.value[nextIndex].id
+  }
+}
+
+function handleItemDeleted(itemPath: string): void {
+  const normalized = itemPath.replace(/\\/g, '/')
+  const tabsToClose = tabs.value.filter((tab) => {
+    if (!tab.filePath) return false
+    const filePath = tab.filePath.replace(/\\/g, '/')
+    return filePath === normalized || filePath.startsWith(`${normalized}/`)
+  })
+
+  for (const tab of tabsToClose) {
+    forceCloseTab(tab.id)
+  }
+}
+
 async function closeTab(tabId: string): Promise<void> {
   const index = tabs.value.findIndex((tab) => tab.id === tabId)
   if (index < 0) return
@@ -238,6 +270,7 @@ onUnmounted(() => {
         :theme="theme"
         @open-file="handleNotebookFileOpen"
         @collapse="handleCollapseSidebar"
+        @item-deleted="handleItemDeleted"
       />
 
       <button

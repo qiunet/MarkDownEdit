@@ -4,6 +4,7 @@ export interface DirEntry {
   name: string
   path: string
   type: 'file' | 'directory'
+  editable?: boolean
 }
 
 export interface NotebookState {
@@ -26,6 +27,9 @@ export interface FileApi {
   readNotebookDir: (dirPath: string) => Promise<DirEntry[]>
   readNotebookFile: (filePath: string) => Promise<{ filePath: string; content: string }>
   createNotebookFile: (dirPath: string, fileName: string) => Promise<{ filePath: string; content: string }>
+  createNotebookFolder: (parentPath: string, folderName: string) => Promise<{ dirPath: string }>
+  showInExplorer: (itemPath: string) => Promise<void>
+  deleteNotebookEntry: (itemPath: string) => Promise<void>
   setSidebarCollapsed: (collapsed: boolean) => Promise<NotebookState>
   onNotebookChange: (callback: (state: NotebookState) => void) => () => void
   onMenuNew: (callback: () => void) => () => void
@@ -55,6 +59,10 @@ const api: FileApi = {
   readNotebookFile: (filePath: string) => ipcRenderer.invoke('notebook:readFile', filePath),
   createNotebookFile: (dirPath: string, fileName: string) =>
     ipcRenderer.invoke('notebook:createFile', dirPath, fileName),
+  createNotebookFolder: (parentPath: string, folderName: string) =>
+    ipcRenderer.invoke('notebook:createFolder', parentPath, folderName),
+  showInExplorer: (itemPath: string) => ipcRenderer.invoke('notebook:showInExplorer', itemPath),
+  deleteNotebookEntry: (itemPath: string) => ipcRenderer.invoke('notebook:delete', itemPath),
   setSidebarCollapsed: (collapsed: boolean) => ipcRenderer.invoke('notebook:setSidebarCollapsed', collapsed),
   onNotebookChange: (callback) => {
     const handler = (_event: Electron.IpcRendererEvent, state: NotebookState): void => callback(state)

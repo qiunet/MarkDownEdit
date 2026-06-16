@@ -5,6 +5,8 @@ const props = defineProps<{
   visible: boolean
   title?: string
   defaultName?: string
+  placeholder?: string
+  nameLabel?: string
   theme: 'light' | 'dark'
 }>()
 
@@ -36,11 +38,12 @@ watch(inputValue, () => {
 })
 
 function validateName(name: string): string | null {
+  const label = props.nameLabel ?? '文件名'
   if (!name) {
-    return '文件名不能为空'
+    return `${label}不能为空`
   }
   if (/[\\/:*?"<>|]/.test(name)) {
-    return '文件名不能包含 \\ / : * ? " < > | 等字符'
+    return `${label}不能包含 \\ / : * ? " < > | 等字符`
   }
   return null
 }
@@ -80,7 +83,7 @@ function handleKeydown(event: KeyboardEvent): void {
           class="dialog-input"
           :class="{ 'dialog-input-error': errorMessage }"
           type="text"
-          placeholder="文件名，如 notes.md"
+          :placeholder="placeholder ?? '文件名，如 notes.md'"
           @keydown="handleKeydown"
         />
         <p v-if="errorMessage" class="dialog-error">{{ errorMessage }}</p>
