@@ -36,6 +36,11 @@ export interface FileApi {
   onMenuOpen: (callback: () => void) => () => void
   onMenuSave: (callback: () => void) => () => void
   onMenuSaveAs: (callback: () => void) => () => void
+  onExportProgress: (
+    callback: (progress: { current: number; total: number; fileName: string }) => void
+  ) => () => void
+  onExportFinished: (callback: () => void) => () => void
+  exportToPdf: (nameOrPath: string) => Promise<string | null>
 }
 
 const api: FileApi = {
@@ -88,7 +93,21 @@ const api: FileApi = {
     const handler = (): void => callback()
     ipcRenderer.on('menu:save-as', handler)
     return () => ipcRenderer.removeListener('menu:save-as', handler)
-  }
+  },
+  onExportProgress: (callback) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      progress: { current: number; total: number; fileName: string }
+    ): void => callback(progress)
+    ipcRenderer.on('export:progress', handler)
+    return () => ipcRenderer.removeListener('export:progress', handler)
+  },
+  onExportFinished: (callback) => {
+    const handler = (): void => callback()
+    ipcRenderer.on('export:finished', handler)
+    return () => ipcRenderer.removeListener('export:finished', handler)
+  },
+  exportToPdf: (nameOrPath: string) => ipcRenderer.invoke('export:pdf', nameOrPath)
 }
 
 contextBridge.exposeInMainWorld('fileApi', api)

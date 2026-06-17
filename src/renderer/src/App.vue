@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { MdEditor } from 'md-editor-v3'
 import type { UploadImgCallBack } from 'md-editor-v3'
 import NotebookSidebar from './components/NotebookSidebar.vue'
+import ExportProgressDialog from './components/ExportProgressDialog.vue'
 import { setMdBaseDir } from './markdown'
 import 'md-editor-v3/lib/style.css'
 
@@ -32,6 +33,12 @@ const theme = ref<'light' | 'dark'>('light')
 const notebookRoot = ref<string | null>(null)
 const sidebarCollapsed = ref(false)
 const sidebarRef = ref<InstanceType<typeof NotebookSidebar> | null>(null)
+const exportProgress = ref({
+  visible: false,
+  current: 0,
+  total: 0,
+  fileName: ''
+})
 
 const activeTab = computed(() => tabs.value.find((tab) => tab.id === activeTabId.value) ?? tabs.value[0])
 
@@ -222,6 +229,8 @@ let cleanupNew: (() => void) | undefined
 let cleanupOpen: (() => void) | undefined
 let cleanupSave: (() => void) | undefined
 let cleanupSaveAs: (() => void) | undefined
+let cleanupExportProgress: (() => void) | undefined
+let cleanupExportFinished: (() => void) | undefined
 let cleanupTheme: (() => void) | undefined
 let cleanupNotebook: (() => void) | undefined
 
@@ -240,6 +249,17 @@ onMounted(async () => {
   cleanupOpen = window.fileApi.onMenuOpen(() => void handleOpen())
   cleanupSave = window.fileApi.onMenuSave(() => void handleSave(false))
   cleanupSaveAs = window.fileApi.onMenuSaveAs(() => void handleSave(true))
+  cleanupExportProgress = window.fileApi.onExportProgress((progress) => {
+    exportProgress.value = {
+      visible: true,
+      current: progress.current,
+      total: progress.total,
+      fileName: progress.fileName
+    }
+  })
+  cleanupExportFinished = window.fileApi.onExportFinished(() => {
+    exportProgress.value.visible = false
+  })
   cleanupTheme = window.fileApi.onThemeChange((nextTheme) => {
     theme.value = nextTheme
   })
@@ -254,6 +274,8 @@ onUnmounted(() => {
   cleanupOpen?.()
   cleanupSave?.()
   cleanupSaveAs?.()
+  cleanupExportProgress?.()
+  cleanupExportFinished?.()
   cleanupTheme?.()
   cleanupNotebook?.()
 })
@@ -321,6 +343,14 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
+
+    <ExportProgressDialog
+      :visible="exportProgress.visible"
+      :theme="theme"
+      :current="exportProgress.current"
+      :total="exportProgress.total"
+      :file-name="exportProgress.fileName"
+    />
   </div>
 </template>
 

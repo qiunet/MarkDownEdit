@@ -34,6 +34,11 @@ export interface FileApi {
   onMenuOpen: (callback: () => void) => () => void
   onMenuSave: (callback: () => void) => () => void
   onMenuSaveAs: (callback: () => void) => () => void
+  onExportProgress: (
+    callback: (progress: { current: number; total: number; fileName: string }) => void
+  ) => () => void
+  onExportFinished: (callback: () => void) => () => void
+  exportToPdf: (nameOrPath: string) => Promise<string | null>
 }
 
 declare global {

@@ -2,6 +2,8 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import FileNameDialog from './FileNameDialog.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
+import { exportNotebookFileToPdf } from '../pdfExport'
+import { toNotebookRelativePath } from '../notebookPath'
 
 export interface TreeEntry {
   name: string
@@ -15,6 +17,7 @@ const props = defineProps<{
   depth: number
   theme: 'light' | 'dark'
   activeFilePath: string | null
+  notebookRoot: string
 }>()
 
 const emit = defineEmits<{
@@ -93,6 +96,17 @@ function handleContextMenu(event: MouseEvent): void {
 function showInExplorer(): void {
   closeMenu()
   void window.fileApi.showInExplorer(props.entry.path)
+}
+
+async function exportPdf(): Promise<void> {
+  if (props.entry.type !== 'file' || props.entry.editable === false) return
+
+  closeMenu()
+
+  const nameOrPath =
+    toNotebookRelativePath(props.notebookRoot, props.entry.path) || props.entry.name
+
+  await exportNotebookFileToPdf(nameOrPath)
 }
 
 function openCreateFileDialog(): void {
@@ -221,6 +235,10 @@ onUnmounted(() => {
           <button type="button" @click="openCreateFolderDialog">新建文件夹</button>
           <div class="context-menu-divider" />
         </template>
+        <template v-if="entry.type === 'file' && entry.editable !== false">
+          <button type="button" @mousedown.stop @click.stop="exportPdf">导出 PDF</button>
+          <div class="context-menu-divider" />
+        </template>
         <button type="button" @click="showInExplorer">资源管理器展示</button>
         <div class="context-menu-divider" />
         <button type="button" class="menu-danger" @click="openDeleteDialog">删除</button>
@@ -260,6 +278,7 @@ onUnmounted(() => {
         :depth="depth + 1"
         :theme="theme"
         :active-file-path="activeFilePath"
+        :notebook-root="notebookRoot"
         @open-file="emit('openFile', $event)"
         @file-created="(path, content) => emit('fileCreated', path, content)"
         @item-deleted="handleChildDeleted"

@@ -5,6 +5,7 @@ import { readFile, writeFile, stat } from 'fs/promises'
 import { loadSettings, updateSettings, type ThemeMode } from './settings'
 import { saveImages } from './image'
 import { readDirectory, createMarkdownFile, createDirectory, deleteEntry } from './notebook'
+import { exportMarkdownToPdf, exportWorkspaceToPdf } from './pdf'
 
 let mainWindow: BrowserWindow | null = null
 let currentFilePath: string | null = null
@@ -40,6 +41,35 @@ function assertWithinNotebook(itemPath: string): void {
   }
 }
 
+function resolveNotebookPath(nameOrPath: string): string {
+  if (!notebookRoot) {
+    throw new Error('NO_NOTEBOOK')
+  }
+
+  const target = resolve(notebookRoot, nameOrPath)
+  assertWithinNotebook(target)
+  return target
+}
+
+async function handleExportWorkspacePdf(): Promise<void> {
+  if (!notebookRoot) return
+
+  try {
+    await exportWorkspaceToPdf(mainWindow, notebookRoot, getResolvedTheme(), (progress) => {
+      mainWindow?.webContents.send('export:progress', progress)
+    })
+  } catch {
+    await dialog.showMessageBox(mainWindow ?? undefined, {
+      type: 'error',
+      title: '导出失败',
+      message: '工作区导出 PDF 失败，请重试',
+      buttons: ['确定']
+    })
+  } finally {
+    mainWindow?.webContents.send('export:finished')
+  }
+}
+
 function getResolvedTheme(): 'light' | 'dark' {
   return nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
 }
@@ -72,6 +102,17 @@ async function setSidebarCollapsed(collapsed: boolean): Promise<void> {
   await updateSettings({ sidebarCollapsed: collapsed })
   createMenu()
   broadcastNotebook()
+}
+
+function showAboutDialog(): void {
+  void dialog.showMessageBox(mainWindow ?? undefined, {
+    type: 'info',
+    title: '关于 MarkdownEdit',
+    message: 'MarkdownEdit',
+    detail: `版本 ${app.getVersion()}`,
+    buttons: ['确定'],
+    noLink: true
+  })
 }
 
 function createWindow(): void {
@@ -172,6 +213,14 @@ function createMenu(): void {
           accelerator: 'CmdOrCtrl+Shift+S',
           click: () => mainWindow?.webContents.send('menu:save-as')
         },
+        ...(notebookRoot
+          ? [
+              {
+                label: '工作区导出为pdf',
+                click: () => void handleExportWorkspacePdf()
+              }
+            ]
+          : []),
         { type: 'separator' },
         { role: 'quit', label: '退出' }
       ]
@@ -228,6 +277,15 @@ function createMenu(): void {
         { role: 'zoomOut', label: '缩小' },
         { type: 'separator' },
         { role: 'togglefullscreen', label: '全屏' }
+      ]
+    },
+    {
+      label: '帮助',
+      submenu: [
+        {
+          label: '关于 MarkdownEdit',
+          click: () => showAboutDialog()
+        }
       ]
     }
   ]
@@ -412,4 +470,10 @@ ipcMain.handle('notebook:showInExplorer', async (_event, itemPath: string) => {
 ipcMain.handle('notebook:delete', async (_event, itemPath: string) => {
   assertWithinNotebook(itemPath)
   await deleteEntry(itemPath)
+})
+
+ipcMain.handle('export:pdf', async (_event, nameOrPath: string) => {
+  const filePath = resolveNotebookPath(nameOrPath)
+  const content = await readFile(filePath, 'utf-8')
+  return exportMarkdownToPdf(mainWindow, filePath, content, getResolvedTheme())
 })

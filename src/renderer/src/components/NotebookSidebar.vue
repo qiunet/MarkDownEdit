@@ -145,6 +145,7 @@ onUnmounted(() => {
         :depth="0"
         :theme="theme"
         :active-file-path="activeFilePath"
+        :notebook-root="root"
         @open-file="handleOpenFile"
         @file-created="handleFileCreated"
         @item-deleted="handleItemDeleted"

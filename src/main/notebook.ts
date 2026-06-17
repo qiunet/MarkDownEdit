@@ -47,6 +47,21 @@ export async function readDirectory(dirPath: string): Promise<DirEntry[]> {
   })
 }
 
+export async function listAllMarkdownFiles(dirPath: string): Promise<string[]> {
+  const entries = await readDirectory(dirPath)
+  const files: string[] = []
+
+  for (const entry of entries) {
+    if (entry.type === 'directory') {
+      files.push(...(await listAllMarkdownFiles(entry.path)))
+    } else if (entry.editable !== false) {
+      files.push(entry.path)
+    }
+  }
+
+  return files
+}
+
 function validateEntryName(name: string): void {
   const trimmed = name.trim()
   if (!trimmed) {
