@@ -10,6 +10,7 @@ publish:
   provider: github
   owner: qiunet
   repo: MarkDownEdit
+  releaseType: release
 win:
   target:
     - target: nsis
