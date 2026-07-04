@@ -4,14 +4,13 @@ import type MarkdownIt from 'markdown-it'
 let mdBaseDir = ''
 
 export function setMdBaseDir(dir: string | null): void {
-  mdBaseDir = dir ?? ''
+  mdBaseDir = dir ? dir.replace(/\\/g, '/') : ''
 }
 
 function joinPath(base: string, relative: string): string {
-  const sep = base.includes('\\') ? '\\' : '/'
   const normalizedBase = base.replace(/[/\\]+$/, '')
-  const normalizedRelative = relative.replace(/^[/\\]+/, '').split(/[/\\]/).join(sep)
-  return `${normalizedBase}${sep}${normalizedRelative}`
+  const normalizedRelative = relative.replace(/^[/\\]+/, '').split(/[/\\]/).join('/')
+  return `${normalizedBase}/${normalizedRelative}`
 }
 
 function toPreviewImageSrc(src: string): string {
@@ -23,7 +22,7 @@ function toPreviewImageSrc(src: string): string {
   }
 
   const abs = joinPath(mdBaseDir, src)
-  return `mdimage://local/${encodeURIComponent(abs)}`
+  return `mdimage://local?path=${encodeURIComponent(abs)}`
 }
 
 config({

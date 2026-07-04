@@ -44,6 +44,8 @@ const activeTab = computed(() => tabs.value.find((tab) => tab.id === activeTabId
 
 const activeFilePath = computed(() => activeTab.value?.filePath ?? null)
 
+const editorKey = computed(() => `${activeTabId.value}:${activeFilePath.value ?? ''}`)
+
 const showSidebar = computed(() => notebookRoot.value !== null && !sidebarCollapsed.value)
 const showExpandBar = computed(() => notebookRoot.value !== null && sidebarCollapsed.value)
 
@@ -92,6 +94,10 @@ watch(
 )
 
 watch(activeTabId, () => {
+  syncActiveTabToMain()
+})
+
+watch(activeFilePath, () => {
   syncActiveTabToMain()
 })
 
@@ -210,6 +216,7 @@ async function handleSave(saveAs = false): Promise<void> {
 
   tab.filePath = result.filePath
   tab.savedContent = tab.content
+  syncActiveTabToMain()
   sidebarRef.value?.refresh()
 }
 
@@ -332,7 +339,7 @@ onUnmounted(() => {
 
         <div class="editor-area">
           <MdEditor
-            :key="activeTabId"
+            :key="editorKey"
             v-model="activeTab.content"
             :theme="theme"
             preview-theme="github"

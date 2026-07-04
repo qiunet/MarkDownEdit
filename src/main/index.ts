@@ -1,12 +1,12 @@
-import { app, shell, BrowserWindow, ipcMain, dialog, Menu, nativeTheme, protocol, net } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, Menu, nativeTheme, protocol } from 'electron'
 import { join, resolve, relative } from 'path'
-import { pathToFileURL } from 'url'
 import { readFile, writeFile, stat } from 'fs/promises'
 import { loadSettings, updateSettings, type ThemeMode } from './settings'
 import { saveImages } from './image'
 import { readDirectory, createMarkdownFile, createDirectory, deleteEntry } from './notebook'
 import { exportMarkdownToPdf, exportWorkspaceToPdf } from './pdf'
 import { initUpdater, checkForUpdates } from './updater'
+import { registerImageProtocol } from './imageProtocol'
 
 let mainWindow: BrowserWindow | null = null
 let currentFilePath: string | null = null
@@ -336,20 +336,7 @@ app.whenReady().then(async () => {
   sidebarCollapsed = settings.sidebarCollapsed
   nativeTheme.themeSource = themeMode
 
-  protocol.handle('mdimage', async (request) => {
-    try {
-      const url = new URL(request.url)
-      const encoded = url.pathname.replace(/^\//, '')
-      if (!encoded) {
-        return new Response('Not found', { status: 404 })
-      }
-      const filePath = decodeURIComponent(encoded)
-      const normalized = resolve(filePath)
-      return await net.fetch(pathToFileURL(normalized).toString())
-    } catch {
-      return new Response('Not found', { status: 404 })
-    }
-  })
+  registerImageProtocol()
 
   nativeTheme.on('updated', () => {
     if (themeMode === 'system') {
