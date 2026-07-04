@@ -15,6 +15,20 @@ let sidebarCollapsed = false
 
 const isDev = !app.isPackaged
 
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'mdimage',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      bypassCSP: true,
+      stream: true
+    }
+  }
+])
+
 function getNotebookState() {
   return { root: notebookRoot, sidebarCollapsed }
 }
@@ -320,11 +334,13 @@ app.whenReady().then(async () => {
   protocol.handle('mdimage', async (request) => {
     try {
       const url = new URL(request.url)
-      const filePath = url.searchParams.get('path')
-      if (!filePath) {
+      const encoded = url.pathname.replace(/^\//, '')
+      if (!encoded) {
         return new Response('Not found', { status: 404 })
       }
-      return await net.fetch(pathToFileURL(filePath).toString())
+      const filePath = decodeURIComponent(encoded)
+      const normalized = resolve(filePath)
+      return await net.fetch(pathToFileURL(normalized).toString())
     } catch {
       return new Response('Not found', { status: 404 })
     }
