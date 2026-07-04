@@ -6,6 +6,7 @@ import { loadSettings, updateSettings, type ThemeMode } from './settings'
 import { saveImages } from './image'
 import { readDirectory, createMarkdownFile, createDirectory, deleteEntry } from './notebook'
 import { exportMarkdownToPdf, exportWorkspaceToPdf } from './pdf'
+import { initUpdater, checkForUpdates } from './updater'
 
 let mainWindow: BrowserWindow | null = null
 let currentFilePath: string | null = null
@@ -297,6 +298,10 @@ function createMenu(): void {
       label: '帮助',
       submenu: [
         {
+          label: '检查更新',
+          click: () => void checkForUpdates(true)
+        },
+        {
           label: '关于 MarkdownEdit',
           click: () => showAboutDialog()
         }
@@ -354,6 +359,7 @@ app.whenReady().then(async () => {
 
   createMenu()
   createWindow()
+  initUpdater(() => mainWindow)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

@@ -31,3 +31,4 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   shortcutName: MarkdownEdit
+  differentialPackage: true

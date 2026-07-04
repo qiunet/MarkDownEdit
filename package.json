@@ -1,6 +1,6 @@
 {
   "name": "markdown-edit",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Markdown editor built with Electron, Vue 3 and TypeScript",
   "main": "./out/main/index.js",
   "author": "",
@@ -19,6 +19,7 @@
     "release": "npm run build && electron-builder --publish always --config electron-builder.yml"
   },
   "dependencies": {
+    "electron-updater": "^6.8.9",
     "markdown-it": "^14.2.0",
     "md-editor-v3": "^6.5.1"
   },
