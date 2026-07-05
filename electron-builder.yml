@@ -1,5 +1,18 @@
 appId: com.markdownedit.app
 productName: MarkdownEdit
+fileAssociations:
+  - ext: md
+    name: Markdown
+    description: Markdown Document
+    mimeType: text/markdown
+    role: Editor
+    icon: build/icon.png
+  - ext: markdown
+    name: Markdown
+    description: Markdown Document
+    mimeType: text/markdown
+    role: Editor
+    icon: build/icon.png
 directories:
   buildResources: build
   output: release

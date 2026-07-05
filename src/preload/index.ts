@@ -15,6 +15,7 @@ export interface NotebookState {
 export interface FileApi {
   openFile: () => Promise<{ filePath: string; content: string } | null>
   saveFile: (content: string, saveAs?: boolean, filePath?: string | null) => Promise<{ filePath: string } | null>
+  writeFile: (content: string, filePath: string) => Promise<void>
   getCurrentPath: () => Promise<string | null>
   setCurrentPath: (filePath: string | null) => Promise<void>
   newFile: () => Promise<void>
@@ -36,6 +37,8 @@ export interface FileApi {
   onMenuOpen: (callback: () => void) => () => void
   onMenuSave: (callback: () => void) => () => void
   onMenuSaveAs: (callback: () => void) => () => void
+  signalReady: () => Promise<Array<{ filePath: string; content: string }>>
+  onOpenExternalFile: (callback: (file: { filePath: string; content: string }) => void) => () => void
   onExportProgress: (
     callback: (progress: { current: number; total: number; fileName: string }) => void
   ) => () => void
@@ -47,6 +50,7 @@ const api: FileApi = {
   openFile: () => ipcRenderer.invoke('dialog:openFile'),
   saveFile: (content: string, saveAs = false, filePath?: string | null) =>
     ipcRenderer.invoke('dialog:saveFile', content, saveAs, filePath),
+  writeFile: (content: string, filePath: string) => ipcRenderer.invoke('file:write', content, filePath),
   getCurrentPath: () => ipcRenderer.invoke('file:getCurrentPath'),
   setCurrentPath: (filePath: string | null) => ipcRenderer.invoke('file:setCurrentPath', filePath),
   newFile: () => ipcRenderer.invoke('file:new'),
@@ -93,6 +97,15 @@ const api: FileApi = {
     const handler = (): void => callback()
     ipcRenderer.on('menu:save-as', handler)
     return () => ipcRenderer.removeListener('menu:save-as', handler)
+  },
+  signalReady: () => ipcRenderer.invoke('file:signalReady'),
+  onOpenExternalFile: (callback) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      file: { filePath: string; content: string }
+    ): void => callback(file)
+    ipcRenderer.on('file:openExternal', handler)
+    return () => ipcRenderer.removeListener('file:openExternal', handler)
   },
   onExportProgress: (callback) => {
     const handler = (

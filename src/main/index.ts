@@ -7,6 +7,7 @@ import { readDirectory, createMarkdownFile, createDirectory, deleteEntry } from 
 import { exportMarkdownToPdf, exportWorkspaceToPdf } from './pdf'
 import { initUpdater, checkForUpdates } from './updater'
 import { registerImageProtocol } from './imageProtocol'
+import { getMarkdownPathFromArgv, initOsFileHandlers, markRendererReady, openExternalFile } from './osFile'
 
 let mainWindow: BrowserWindow | null = null
 let currentFilePath: string | null = null
@@ -325,33 +326,47 @@ async function openNotebookFolder(): Promise<void> {
   await setNotebookRoot(result.filePaths[0])
 }
 
-app.whenReady().then(async () => {
-  if (process.platform === 'win32') {
-    app.setAppUserModelId('com.markdownedit.app')
-  }
-
-  const settings = await loadSettings()
-  themeMode = settings.themeMode
-  notebookRoot = settings.notebookRoot
-  sidebarCollapsed = settings.sidebarCollapsed
-  nativeTheme.themeSource = themeMode
-
-  registerImageProtocol()
-
-  nativeTheme.on('updated', () => {
-    if (themeMode === 'system') {
-      broadcastTheme()
+if (
+  initOsFileHandlers(
+    () => mainWindow,
+    (filePath) => {
+      currentFilePath = filePath
     }
-  })
+  )
+) {
+  app.whenReady().then(async () => {
+    if (process.platform === 'win32') {
+      app.setAppUserModelId('com.markdownedit.app')
+    }
 
-  createMenu()
-  createWindow()
-  initUpdater(() => mainWindow)
+    const settings = await loadSettings()
+    themeMode = settings.themeMode
+    notebookRoot = settings.notebookRoot
+    sidebarCollapsed = settings.sidebarCollapsed
+    nativeTheme.themeSource = themeMode
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    registerImageProtocol()
+
+    nativeTheme.on('updated', () => {
+      if (themeMode === 'system') {
+        broadcastTheme()
+      }
+    })
+
+    createMenu()
+    createWindow()
+    initUpdater(() => mainWindow)
+
+    const startupFile = getMarkdownPathFromArgv(process.argv)
+    if (startupFile) {
+      void openExternalFile(startupFile)
+    }
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    })
   })
-})
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -405,6 +420,12 @@ ipcMain.handle('dialog:saveFile', async (_event, content: string, saveAs = false
 
   return { filePath: targetPath }
 })
+
+ipcMain.handle('file:write', async (_event, content: string, filePath: string) => {
+  await writeFile(filePath, content, 'utf-8')
+})
+
+ipcMain.handle('file:signalReady', () => markRendererReady())
 
 ipcMain.handle('file:getCurrentPath', () => currentFilePath)
 

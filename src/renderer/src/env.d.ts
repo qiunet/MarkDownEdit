@@ -13,6 +13,7 @@ export interface NotebookState {
 export interface FileApi {
   openFile: () => Promise<{ filePath: string; content: string } | null>
   saveFile: (content: string, saveAs?: boolean, filePath?: string | null) => Promise<{ filePath: string } | null>
+  writeFile: (content: string, filePath: string) => Promise<void>
   getCurrentPath: () => Promise<string | null>
   setCurrentPath: (filePath: string | null) => Promise<void>
   newFile: () => Promise<void>
@@ -34,6 +35,8 @@ export interface FileApi {
   onMenuOpen: (callback: () => void) => () => void
   onMenuSave: (callback: () => void) => () => void
   onMenuSaveAs: (callback: () => void) => () => void
+  signalReady: () => Promise<Array<{ filePath: string; content: string }>>
+  onOpenExternalFile: (callback: (file: { filePath: string; content: string }) => void) => () => void
   onExportProgress: (
     callback: (progress: { current: number; total: number; fileName: string }) => void
   ) => () => void

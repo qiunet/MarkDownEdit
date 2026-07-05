@@ -15,6 +15,7 @@ interface EditorTab {
 }
 
 const defaultContent = ''
+const AUTO_SAVE_INTERVAL_MS = 5000
 let tabCounter = 0
 
 function createTab(content = defaultContent, filePath: string | null = null): EditorTab {
@@ -220,6 +221,19 @@ async function handleSave(saveAs = false): Promise<void> {
   sidebarRef.value?.refresh()
 }
 
+async function autoSaveDirtyTabs(): Promise<void> {
+  for (const tab of tabs.value) {
+    if (!tab.filePath || !isTabDirty(tab)) continue
+
+    try {
+      await window.fileApi.writeFile(tab.content, tab.filePath)
+      tab.savedContent = tab.content
+    } catch {
+      // 自动保存失败时不打断编辑
+    }
+  }
+}
+
 function handleCollapseSidebar(): void {
   void window.fileApi.setSidebarCollapsed(true)
 }
@@ -232,6 +246,7 @@ function handleNotebookFileOpen(filePath: string, content: string): void {
   openFileInTab(filePath, content)
 }
 
+let cleanupExternalFile: (() => void) | undefined
 let cleanupNew: (() => void) | undefined
 let cleanupOpen: (() => void) | undefined
 let cleanupSave: (() => void) | undefined
@@ -240,12 +255,22 @@ let cleanupExportProgress: (() => void) | undefined
 let cleanupExportFinished: (() => void) | undefined
 let cleanupTheme: (() => void) | undefined
 let cleanupNotebook: (() => void) | undefined
+let autoSaveTimer: ReturnType<typeof setInterval> | undefined
 
 onMounted(async () => {
-  const [{ resolved }, notebookState] = await Promise.all([
+  cleanupExternalFile = window.fileApi.onOpenExternalFile((file) => {
+    openFileInTab(file.filePath, file.content)
+  })
+
+  const [{ resolved }, notebookState, pendingExternalFiles] = await Promise.all([
     window.fileApi.getTheme(),
-    window.fileApi.getNotebookState()
+    window.fileApi.getNotebookState(),
+    window.fileApi.signalReady()
   ])
+
+  for (const file of pendingExternalFiles) {
+    openFileInTab(file.filePath, file.content)
+  }
 
   theme.value = resolved
   notebookRoot.value = notebookState.root
@@ -274,9 +299,17 @@ onMounted(async () => {
     notebookRoot.value = state.root
     sidebarCollapsed.value = state.sidebarCollapsed
   })
+
+  autoSaveTimer = setInterval(() => {
+    void autoSaveDirtyTabs()
+  }, AUTO_SAVE_INTERVAL_MS)
 })
 
 onUnmounted(() => {
+  if (autoSaveTimer) {
+    clearInterval(autoSaveTimer)
+  }
+  cleanupExternalFile?.()
   cleanupNew?.()
   cleanupOpen?.()
   cleanupSave?.()
