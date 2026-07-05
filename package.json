@@ -1,6 +1,6 @@
 {
   "name": "markdown-edit",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "Markdown editor built with Electron, Vue 3 and TypeScript",
   "main": "./out/main/index.js",
   "author": "",

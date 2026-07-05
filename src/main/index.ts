@@ -2,6 +2,7 @@ import { app, shell, BrowserWindow, ipcMain, dialog, Menu, nativeTheme, protocol
 import { join, resolve, relative } from 'path'
 import { readFile, writeFile, stat } from 'fs/promises'
 import { loadSettings, updateSettings, type ThemeMode } from './settings'
+import { clearSession, loadSession, saveSession, type EditorSession } from './session'
 import { saveImages } from './image'
 import { readDirectory, createMarkdownFile, createDirectory, deleteEntry } from './notebook'
 import { exportMarkdownToPdf, exportWorkspaceToPdf } from './pdf'
@@ -14,6 +15,7 @@ let currentFilePath: string | null = null
 let themeMode: ThemeMode = 'system'
 let notebookRoot: string | null = null
 let sidebarCollapsed = false
+let isQuitting = false
 
 const isDev = !app.isPackaged
 
@@ -191,6 +193,12 @@ function createWindow(): void {
 
   mainWindow.on('closed', () => {
     mainWindow = null
+  })
+
+  mainWindow.on('close', (event) => {
+    if (isQuitting) return
+    event.preventDefault()
+    mainWindow?.webContents.send('session:flush')
   })
 }
 
@@ -373,6 +381,27 @@ app.on('window-all-closed', () => {
     app.quit()
   }
 })
+
+app.on('before-quit', (event) => {
+  if (isQuitting) return
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    isQuitting = true
+    return
+  }
+  event.preventDefault()
+  mainWindow.webContents.send('session:flush')
+})
+
+ipcMain.on('session:flushed', () => {
+  isQuitting = true
+  app.quit()
+})
+
+ipcMain.handle('session:get', () => loadSession())
+
+ipcMain.handle('session:save', (_event, session: EditorSession) => saveSession(session))
+
+ipcMain.handle('session:clear', () => clearSession())
 
 ipcMain.handle('dialog:openFile', async () => {
   const result = await dialog.showOpenDialog({

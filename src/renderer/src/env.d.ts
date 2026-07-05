@@ -10,6 +10,11 @@ export interface NotebookState {
   sidebarCollapsed: boolean
 }
 
+export interface EditorSession {
+  tabs: Array<{ filePath: string | null; content: string }>
+  activeTabIndex: number
+}
+
 export interface FileApi {
   openFile: () => Promise<{ filePath: string; content: string } | null>
   saveFile: (content: string, saveAs?: boolean, filePath?: string | null) => Promise<{ filePath: string } | null>
@@ -37,6 +42,11 @@ export interface FileApi {
   onMenuSaveAs: (callback: () => void) => () => void
   signalReady: () => Promise<Array<{ filePath: string; content: string }>>
   onOpenExternalFile: (callback: (file: { filePath: string; content: string }) => void) => () => void
+  getSession: () => Promise<EditorSession | null>
+  saveSession: (session: EditorSession) => Promise<void>
+  clearSession: () => Promise<void>
+  onSessionFlush: (callback: () => void) => () => void
+  notifySessionFlushed: () => void
   onExportProgress: (
     callback: (progress: { current: number; total: number; fileName: string }) => void
   ) => () => void

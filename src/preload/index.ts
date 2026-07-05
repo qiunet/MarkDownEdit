@@ -12,6 +12,11 @@ export interface NotebookState {
   sidebarCollapsed: boolean
 }
 
+export interface EditorSession {
+  tabs: Array<{ filePath: string | null; content: string }>
+  activeTabIndex: number
+}
+
 export interface FileApi {
   openFile: () => Promise<{ filePath: string; content: string } | null>
   saveFile: (content: string, saveAs?: boolean, filePath?: string | null) => Promise<{ filePath: string } | null>
@@ -39,6 +44,11 @@ export interface FileApi {
   onMenuSaveAs: (callback: () => void) => () => void
   signalReady: () => Promise<Array<{ filePath: string; content: string }>>
   onOpenExternalFile: (callback: (file: { filePath: string; content: string }) => void) => () => void
+  getSession: () => Promise<EditorSession | null>
+  saveSession: (session: EditorSession) => Promise<void>
+  clearSession: () => Promise<void>
+  onSessionFlush: (callback: () => void) => () => void
+  notifySessionFlushed: () => void
   onExportProgress: (
     callback: (progress: { current: number; total: number; fileName: string }) => void
   ) => () => void
@@ -107,6 +117,15 @@ const api: FileApi = {
     ipcRenderer.on('file:openExternal', handler)
     return () => ipcRenderer.removeListener('file:openExternal', handler)
   },
+  getSession: () => ipcRenderer.invoke('session:get'),
+  saveSession: (session) => ipcRenderer.invoke('session:save', session),
+  clearSession: () => ipcRenderer.invoke('session:clear'),
+  onSessionFlush: (callback) => {
+    const handler = (): void => callback()
+    ipcRenderer.on('session:flush', handler)
+    return () => ipcRenderer.removeListener('session:flush', handler)
+  },
+  notifySessionFlushed: () => ipcRenderer.send('session:flushed'),
   onExportProgress: (callback) => {
     const handler = (
       _event: Electron.IpcRendererEvent,

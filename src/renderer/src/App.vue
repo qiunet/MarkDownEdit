@@ -5,6 +5,7 @@ import type { UploadImgCallBack } from 'md-editor-v3'
 import NotebookSidebar from './components/NotebookSidebar.vue'
 import ExportProgressDialog from './components/ExportProgressDialog.vue'
 import { setMdBaseDir } from './markdown'
+import type { EditorSession } from './env'
 import 'md-editor-v3/lib/style.css'
 
 interface EditorTab {
@@ -16,6 +17,7 @@ interface EditorTab {
 
 const defaultContent = ''
 const AUTO_SAVE_INTERVAL_MS = 5000
+const SESSION_SAVE_DELAY_MS = 1000
 let tabCounter = 0
 
 function createTab(content = defaultContent, filePath: string | null = null): EditorTab {
@@ -234,6 +236,68 @@ async function autoSaveDirtyTabs(): Promise<void> {
   }
 }
 
+function buildSession(): EditorSession {
+  return {
+    tabs: tabs.value.map((tab) => ({
+      filePath: tab.filePath,
+      content: tab.content
+    })),
+    activeTabIndex: Math.max(0, tabs.value.findIndex((tab) => tab.id === activeTabId.value))
+  }
+}
+
+function isEmptySession(session: EditorSession): boolean {
+  return session.tabs.length === 1 && !session.tabs[0].filePath && !session.tabs[0].content.trim()
+}
+
+async function persistSession(): Promise<void> {
+  const session = buildSession()
+  if (isEmptySession(session)) {
+    await window.fileApi.clearSession()
+    return
+  }
+  await window.fileApi.saveSession(session)
+}
+
+async function restoreSession(): Promise<void> {
+  const session = await window.fileApi.getSession()
+  if (!session?.tabs.length) return
+
+  const restoredTabs: EditorTab[] = []
+
+  for (const item of session.tabs) {
+    if (item.filePath) {
+      let savedContent = item.content
+      try {
+        const disk = await window.fileApi.readNotebookFile(item.filePath)
+        savedContent = disk.content
+      } catch {
+        // 文件已删除时，保留会话中的内容
+      }
+
+      tabCounter += 1
+      restoredTabs.push({
+        id: `tab-${tabCounter}`,
+        filePath: item.filePath,
+        content: item.content,
+        savedContent
+      })
+    } else {
+      restoredTabs.push(createTab(item.content, null))
+    }
+  }
+
+  tabs.value = restoredTabs
+  const index = Math.min(Math.max(session.activeTabIndex, 0), restoredTabs.length - 1)
+  activeTabId.value = restoredTabs[index].id
+}
+
+async function flushSessionBeforeQuit(): Promise<void> {
+  await autoSaveDirtyTabs()
+  await persistSession()
+  window.fileApi.notifySessionFlushed()
+}
+
 function handleCollapseSidebar(): void {
   void window.fileApi.setSidebarCollapsed(true)
 }
@@ -255,9 +319,26 @@ let cleanupExportProgress: (() => void) | undefined
 let cleanupExportFinished: (() => void) | undefined
 let cleanupTheme: (() => void) | undefined
 let cleanupNotebook: (() => void) | undefined
+let cleanupSessionFlush: (() => void) | undefined
 let autoSaveTimer: ReturnType<typeof setInterval> | undefined
+let sessionSaveTimer: ReturnType<typeof setTimeout> | undefined
+
+function schedulePersistSession(): void {
+  if (sessionSaveTimer) {
+    clearTimeout(sessionSaveTimer)
+  }
+  sessionSaveTimer = setTimeout(() => {
+    void persistSession()
+  }, SESSION_SAVE_DELAY_MS)
+}
+
+watch([tabs, activeTabId], schedulePersistSession, { deep: true })
 
 onMounted(async () => {
+  cleanupSessionFlush = window.fileApi.onSessionFlush(() => {
+    void flushSessionBeforeQuit()
+  })
+
   cleanupExternalFile = window.fileApi.onOpenExternalFile((file) => {
     openFileInTab(file.filePath, file.content)
   })
@@ -267,6 +348,8 @@ onMounted(async () => {
     window.fileApi.getNotebookState(),
     window.fileApi.signalReady()
   ])
+
+  await restoreSession()
 
   for (const file of pendingExternalFiles) {
     openFileInTab(file.filePath, file.content)
@@ -309,6 +392,11 @@ onUnmounted(() => {
   if (autoSaveTimer) {
     clearInterval(autoSaveTimer)
   }
+  if (sessionSaveTimer) {
+    clearTimeout(sessionSaveTimer)
+  }
+  void persistSession()
+  cleanupSessionFlush?.()
   cleanupExternalFile?.()
   cleanupNew?.()
   cleanupOpen?.()
